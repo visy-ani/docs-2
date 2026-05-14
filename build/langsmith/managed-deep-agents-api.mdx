@@ -1,0 +1,66 @@
+---
+title: Managed Deep Agents API
+sidebarTitle: Overview
+description: REST API for creating, running, and managing hosted Deep Agents in LangSmith.
+icon: "api"
+tag: "PREVIEW"
+---
+
+Use the Managed Deep Agents API to create hosted Deep Agents, manage durable threads, and stream runs from LangSmith.
+
+<Note>
+    Managed Deep Agents is in private preview. [Join the waitlist](https://www.langchain.com/langsmith-managed-deep-agents-waitlist) to request access. For an end-to-end walkthrough with request examples, see [Deploy Managed Deep Agents](/langsmith/deploy-managed-deep-agent).
+</Note>
+
+For a conceptual introduction to the underlying framework, see the [open source Deep Agents docs](/oss/python/python/deepagents/overview).
+
+## Authentication
+
+Requests require a LangSmith API key for a workspace with Managed Deep Agents private preview access. Pass the key with each request:
+
+```txt
+X-Api-Key: <LANGSMITH_API_KEY>
+```
+
+## Base URL
+
+The private preview API is served from `https://api.smith.langchain.com/v1/deepagents`. Self-hosted and Hybrid deployments are not supported in private preview.
+
+## Verify access
+
+Confirm your API key and workspace have private preview access before working through the route reference:
+
+```bash
+curl https://api.smith.langchain.com/v1/deepagents/agents \
+  -H "X-Api-Key: $LANGSMITH_API_KEY"
+```
+
+A `200` response with a (possibly empty) list of agents confirms access. A `401` or `403` means the workspace is not enrolled in the preview.
+
+## Resource groups
+
+| Resource group | Purpose |
+| --- | --- |
+| Agents | Create and manage Managed Deep Agent resources. |
+| Threads | Create and manage durable thread state for Managed Deep Agents. |
+| Runs | Start and stream Managed Deep Agent runs on threads. |
+
+## Private preview scope
+
+Private preview covers the agent lifecycle, threads, and runs. Other LangSmith Deployment endpoint groups, including integrations, auth, triggers, skills, and sandboxes, are out of scope for this preview.
+
+## Next steps
+
+- Have access? See [Deploy Managed Deep Agents](/langsmith/deploy-managed-deep-agent) for an end-to-end walkthrough.
+- Need access? [Join the private preview waitlist](https://www.langchain.com/langsmith-managed-deep-agents-waitlist).
+
+---
+
+<div className="source-links">
+<Callout icon="terminal-2">
+    [Connect these docs](/use-these-docs) to Claude, VSCode, and more via MCP for real-time answers.
+</Callout>
+<Callout icon="edit">
+    [Edit this page on GitHub](https://github.com/langchain-ai/docs/edit/main/src/langsmith/managed-deep-agents-api.mdx) or [file an issue](https://github.com/langchain-ai/docs/issues/new/choose).
+</Callout>
+</div>
