@@ -65,7 +65,7 @@ const asyncSubagents: AsyncSubAgent[] = [
 ];
 
 const agent = createDeepAgent({
-  model: "google_genai:gemini-3.1-pro-preview",
+  model: "google_genai:gemini-3.5-flash",
   subagents: [...asyncSubagents],
 });
 ```
@@ -262,7 +262,7 @@ When using LangGraph-based deployments, every async subagent run is a standard L
 
 ```typescript
 const agent = createDeepAgent({
-  model: "google_genai:gemini-3.1-pro-preview",
+  model: "google_genai:gemini-3.5-flash",
   systemPrompt: `...your instructions...
 
     After launching an async subagent, ALWAYS return control to the user.

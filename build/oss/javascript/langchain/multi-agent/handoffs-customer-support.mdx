@@ -646,7 +646,6 @@ Here's everything together in a runnable script:
 import { createMiddleware, createAgent } from "langchain";
 
 import { z } from "zod";
-import { v4 as uuidv4 } from "uuid";
 import { tool, ToolMessage, type ToolRuntime, HumanMessage } from "langchain";
 import { Command, MemorySaver, StateSchema } from "@langchain/langgraph";
 import { ChatOpenAI } from "@langchain/openai";
@@ -857,7 +856,7 @@ const agent = createAgent({
 });
 
 // Configuration for this conversation thread
-const threadId = uuidv4();
+const threadId = crypto.randomUUID();
 const config = { configurable: { thread_id: threadId } };
 
 // Turn 1: Initial message - starts with warranty_collector step

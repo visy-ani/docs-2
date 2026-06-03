@@ -277,6 +277,46 @@ for await (const activity of stream.extensions.toolActivity) {
 ```
 
 
+### Register transformers on middleware
+
+
+
+<Note>Middleware-registered transformers require `langchain@1.4.3` or later.</Note>
+
+
+Middleware can declare stream transformer factories alongside its hooks and tools. The factory shape differs between languages:
+
+
+
+Pass `streamTransformers` to `createMiddleware` as a tuple of factories. Each factory has the shape `() => StreamTransformer<any>` (zero arguments) and is invoked once per scope. Returning a fresh transformer per call keeps each subgraph isolated.
+
+```ts
+import { createAgent, createMiddleware } from "langchain";
+
+const toolActivityMiddleware = createMiddleware({
+  name: "ToolActivityMiddleware",
+  streamTransformers: [toolActivityTransformer],
+});
+
+const agent = createAgent({
+  model: "gpt-5-nano",
+  tools: [getWeather],
+  middleware: [toolActivityMiddleware],
+});
+```
+
+
+
+
+At compile time, `createAgent` merges middleware-registered factories with anything passed to its own `streamTransformers` option. The final order on the compiled graph is:
+
+1. The built-in `ToolCallTransformer`.
+2. Middleware-registered factories, in middleware order.
+3. Caller-supplied `streamTransformers` from `createAgent`.
+
+This keeps the built-in tool-call projection in front of consumer transformers and gives caller-supplied entries the final word.
+
+
 See [Build your own projection](/oss/javascript/langgraph/event-streaming#build-your-own-projection) for the transformer contract.
 
 ## Related

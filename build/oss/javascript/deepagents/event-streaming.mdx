@@ -34,7 +34,7 @@ Each subagent stream exposes the same kinds of projections as the parent run, su
 
 
 
-TypeScript uses camelCase projection names such as `toolCalls` and `taskInput`.
+TypeScript uses camelCase projection names such as `toolCalls` and `taskInput`. Each subagent stream can expose `.messages`, `.toolCalls`, `.values`, `.subagents`, and `.output`.
 
 
 | Field | Description |
@@ -43,9 +43,9 @@ TypeScript uses camelCase projection names such as `toolCalls` and `taskInput`.
 | `messages` | Messages emitted by the subagent. |
 | `subagents` | Nested subagent invocations. |
 | `output` | Final subagent state, or completion signal for the delegated task. |
-
 | `taskInput` | Promise for the prompt passed to the task tool. |
 | `toolCalls` | Tool calls scoped to the subagent. |
+
 
 ## Track subagent lifecycle
 
@@ -199,6 +199,25 @@ await Promise.all([
 
 When you need exact arrival order across the coordinator and all subagents, iterate raw protocol events and use `namespace` to identify the source:
 
+
+
+```ts
+const stream = await agent.streamEvents(input, { version: "v3" });
+
+for await (const event of stream) {
+  if (event.method !== "messages") continue;
+
+  const data = event.params.data;
+  if (data.event !== "content-block-delta") continue;
+
+  const block = data.delta ?? {};
+  if (block.type === "text-delta") {
+    const isSubagent = event.params.namespace.some((seg) => seg.startsWith("tools:"));
+    const source = isSubagent ? "subagent" : "coordinator";
+    console.log(`[${source}] ${block.text}`);
+  }
+}
+```
 
 
 ## Subagents versus subgraphs
