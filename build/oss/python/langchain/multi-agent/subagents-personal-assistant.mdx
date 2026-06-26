@@ -17,6 +17,11 @@ In this tutorial, you'll build a personal assistant system that demonstrates the
 
 We will also incorporate [human-in-the-loop review](/oss/python/langchain/human-in-the-loop) to allow users to approve, edit, and reject actions (such as outbound emails) as desired.
 
+<Note>
+If you are migrating from the [`langgraph-supervisor`](https://github.com/langchain-ai/langgraph-supervisor-py) package, see [Migrate from langgraph-supervisor](/oss/python/migrate/langgraph-supervisor) for before-and-after patterns, including interrupt and resume flows.
+</Note>
+
+
 ### Why use a supervisor?
 
 Multi-agent architectures allow you to partition [tools](/oss/python/langchain/tools) across workers, each with their own individual prompts or instructions. Consider an agent with direct access to all calendar and email APIs: it must choose from many similar tools, understand exact formats for each API, and handle multiple domains simultaneously. If performance degrades, it may be helpful to separate related tools and associated prompts into logical groups (in part to manage iterative improvements).
@@ -161,12 +166,17 @@ Test the calendar agent to see how it handles natural language scheduling:
 ```python
 query = "Schedule a team meeting next Tuesday at 2pm for 1 hour"
 
-for step in calendar_agent.stream(
-    {"messages": [{"role": "user", "content": query}]}
-):
-    for update in step.values():
-        for message in update.get("messages", []):
-            message.pretty_print()
+stream = calendar_agent.stream_events(
+    {"messages": [{"role": "user", "content": query}]},
+    version="v3",
+)
+for kind, item in stream.interleave("messages", "tool_calls"):
+    if kind == "messages":
+        for token in item.text:
+            print(token, end="", flush=True)
+    elif kind == "tool_calls":
+        print(f"\nTool call: {item.tool_name}({item.input})")
+        print(f"Tool result: {item.output}")
 ```
 
 
@@ -229,12 +239,17 @@ Test the email agent with a natural language request:
 ```python
 query = "Send the design team a reminder about reviewing the new mockups"
 
-for step in email_agent.stream(
-    {"messages": [{"role": "user", "content": query}]}
-):
-    for update in step.values():
-        for message in update.get("messages", []):
-            message.pretty_print()
+stream = email_agent.stream_events(
+    {"messages": [{"role": "user", "content": query}]},
+    version="v3",
+)
+for kind, item in stream.interleave("messages", "tool_calls"):
+    if kind == "messages":
+        for token in item.text:
+            print(token, end="", flush=True)
+    elif kind == "tool_calls":
+        print(f"\nTool call: {item.tool_name}({item.input})")
+        print(f"Tool result: {item.output}")
 ```
 
 
@@ -319,7 +334,7 @@ SUPERVISOR_PROMPT = (
     "You are a helpful personal assistant. "
     "You can schedule calendar events and send emails. "
     "Break down user requests into appropriate tool calls and coordinate the results. "
-    "When a request involves multiple actions, use multiple tools in sequence."
+    "When a request involves multiple actions, use multiple tools in sequence or in parallel as appropriate."
 )
 
 supervisor_agent = create_agent(
@@ -341,12 +356,17 @@ Now test your complete system with complex requests that require coordination ac
 ```python
 query = "Schedule a team standup for tomorrow at 9am"
 
-for step in supervisor_agent.stream(
-    {"messages": [{"role": "user", "content": query}]}
-):
-    for update in step.values():
-        for message in update.get("messages", []):
-            message.pretty_print()
+stream = supervisor_agent.stream_events(
+    {"messages": [{"role": "user", "content": query}]},
+    version="v3",
+)
+for kind, item in stream.interleave("messages", "tool_calls"):
+    if kind == "messages":
+        for token in item.text:
+            print(token, end="", flush=True)
+    elif kind == "tool_calls":
+        print(f"\nTool call: {item.tool_name}({item.input})")
+        print(f"Tool result: {item.output}")
 ```
 
 
@@ -381,12 +401,17 @@ query = (
     "and send them an email reminder about reviewing the new mockups."
 )
 
-for step in supervisor_agent.stream(
-    {"messages": [{"role": "user", "content": query}]}
-):
-    for update in step.values():
-        for message in update.get("messages", []):
-            message.pretty_print()
+stream = supervisor_agent.stream_events(
+    {"messages": [{"role": "user", "content": query}]},
+    version="v3",
+)
+for kind, item in stream.interleave("messages", "tool_calls"):
+    if kind == "messages":
+        for token in item.text:
+            print(token, end="", flush=True)
+    elif kind == "tool_calls":
+        print(f"\nTool call: {item.tool_name}({item.input})")
+        print(f"Tool result: {item.output}")
 ```
 
 
@@ -420,6 +445,10 @@ Let me know if you'd like to add more details to the meeting or include addition
 ```
 
 The supervisor recognizes this requires both calendar and email actions, calls `schedule_event` for the meeting, then calls `manage_email` for the reminder. Each sub-agent completes its task, and the supervisor synthesizes both results into a coherent response.
+
+<Note>
+The supervisor dispatches tasks to subagents sequentially by default. Each tool call completes before the next one starts. However, many LLMs will issue multiple tool calls in a single response (as shown in the trace above, where both `schedule_event` and `manage_email` are called together), which the runtime executes in parallel. You can also configure explicit parallel dispatch. See the [`create_supervisor` reference docs](https://reference.langchain.com/python/langgraph-supervisor/supervisor/create_supervisor) for details.
+</Note>
 
 <Tip>
 Refer to the [LangSmith trace](https://smith.langchain.com/public/95cd00a3-d1f9-4dba-9731-7bf733fb6a3c/r) to see the detailed information flow for the above run, including individual chat model prompts and responses.
@@ -485,7 +514,7 @@ def get_available_time_slots(
 # Step 2: Create specialized sub-agents
 # ============================================================================
 
-model = init_chat_model("gpt-5.4")  # for example
+model = init_chat_model("gpt-5.5")  # for example
 
 calendar_agent = create_agent(
     model,
@@ -561,7 +590,7 @@ supervisor_agent = create_agent(
         "You are a helpful personal assistant. "
         "You can schedule calendar events and send emails. "
         "Break down user requests into appropriate tool calls and coordinate the results. "
-        "When a request involves multiple actions, use multiple tools in sequence."
+        "When a request involves multiple actions, use multiple tools in sequence or in parallel as appropriate."
     )
 )
 
@@ -579,12 +608,17 @@ if __name__ == "__main__":
     print("User Request:", user_request)
     print("\n" + "="*80 + "\n")
 
-    for step in supervisor_agent.stream(
-        {"messages": [{"role": "user", "content": user_request}]}
-    ):
-        for update in step.values():
-            for message in update.get("messages", []):
-                message.pretty_print()
+    stream = supervisor_agent.stream_events(
+        {"messages": [{"role": "user", "content": user_request}]},
+        version="v3",
+    )
+    for kind, item in stream.interleave("messages", "tool_calls"):
+        if kind == "messages":
+            for token in item.text:
+                print(token, end="", flush=True)
+        elif kind == "tool_calls":
+            print(f"\nTool call: {item.tool_name}({item.input})")
+            print(f"Tool result: {item.output}")
 ```
 
 
@@ -658,18 +692,21 @@ query = (
 config = {"configurable": {"thread_id": "6"}}
 
 interrupts = []
-for step in supervisor_agent.stream(
+stream = supervisor_agent.stream_events(
     {"messages": [{"role": "user", "content": query}]},
     config,
-):
-    for update in step.values():
-        if isinstance(update, dict):
-            for message in update.get("messages", []):
-                message.pretty_print()
-        else:
-            interrupt_ = update[0]
-            interrupts.append(interrupt_)
-            print(f"\nINTERRUPTED: {interrupt_.id}")
+    version="v3",
+)
+for kind, item in stream.interleave("messages", "tool_calls"):
+    if kind == "messages":
+        for token in item.text:
+            print(token, end="", flush=True)
+    elif kind == "tool_calls":
+        print(f"\nTool call: {item.tool_name}({item.input})")
+if stream.interrupted:
+    for interrupt_ in stream.interrupts:
+        interrupts.append(interrupt_)
+        print(f"\nINTERRUPTED: {interrupt_.id}")
 ```
 
 
@@ -733,18 +770,21 @@ for interrupt_ in interrupts:
         resume[interrupt_.id] = {"decisions": [{"type": "approve"}]}
 
 interrupts = []
-for step in supervisor_agent.stream(
+stream = supervisor_agent.stream_events(
     Command(resume=resume), # [!code highlight]
     config,
-):
-    for update in step.values():
-        if isinstance(update, dict):
-            for message in update.get("messages", []):
-                message.pretty_print()
-        else:
-            interrupt_ = update[0]
-            interrupts.append(interrupt_)
-            print(f"\nINTERRUPTED: {interrupt_.id}")
+    version="v3",
+)
+for kind, item in stream.interleave("messages", "tool_calls"):
+    if kind == "messages":
+        for token in item.text:
+            print(token, end="", flush=True)
+    elif kind == "tool_calls":
+        print(f"\nTool call: {item.tool_name}({item.input})")
+if stream.interrupted:
+    for interrupt_ in stream.interrupts:
+        interrupts.append(interrupt_)
+        print(f"\nINTERRUPTED: {interrupt_.id}")
 ```
 
 

@@ -23,7 +23,7 @@ LangChain's standard model interfaces give you access to many different provider
 For provider-specific integration information and capabilities, see the provider's [chat model page](/oss/javascript/integrations/chat).
 
 <Tip>
-[LangSmith](/langsmith/home) traces each model call so you can compare providers, inspect tool routing, and debug failures. Follow the [tracing quickstart](/langsmith/trace-with-langchain) to get set up.
+[LangSmith](/langsmith/observability) traces each model call so you can compare providers, inspect tool routing, and debug failures. Follow the [tracing quickstart](/langsmith/trace-with-langchain) to get set up.
 
 We recommend you also set up [LangSmith Engine](/langsmith/engine) which monitors your traces, detects issues, and proposes fixes.
 </Tip>
@@ -425,7 +425,7 @@ const getWeather = tool(
   },
 );
 
-const model = new ChatOpenAI({ model: "gpt-5.4" });
+const model = new ChatOpenAI({ model: "gpt-5.5" });
 const modelWithTools = model.bindTools([getWeather]);  // [!code highlight]
 
 const response = await modelWithTools.invoke("What's the weather like in Boston?");
@@ -892,12 +892,12 @@ LangChain supports running models locally on your own hardware. This is useful f
 
 ### Prompt caching
 
-Many providers offer prompt caching features to reduce latency and cost on repeat processing of the same tokens. These features can be **implicit** or **explicit**:
+Many providers offer prompt caching features to reduce latency and cost on repeat processing of the same tokens. You can engage caching at three levels:
 
-- **Implicit prompt caching:** providers will automatically pass on cost savings if a request hits a cache. Examples: [OpenAI](/oss/javascript/integrations/chat/openai) and [Gemini](/oss/javascript/integrations/chat/google_generative_ai).
-- **Explicit caching:** providers allow you to manually indicate cache points for greater control or to guarantee cost savings. Examples:
+- **Implicit provider caching:** providers automatically pass on cost savings if a request hits a cache, with no configuration required. Examples: [OpenAI](/oss/javascript/integrations/chat/openai) and [Gemini](/oss/javascript/integrations/chat/google_generative_ai).
+- **Provider-level explicit controls:** providers let you manually indicate cache points for greater control or to guarantee cost savings. These mirror the underlying provider/API behavior. Examples:
     - [`ChatOpenAI`](https://reference.langchain.com/javascript/langchain-openai/ChatOpenAI) (via `prompt_cache_key`)
-    - Anthropic's [`AnthropicPromptCachingMiddleware`](/oss/javascript/integrations/chat/anthropic#prompt-caching)
+    - Anthropic content-block [`cache_control`](/oss/javascript/integrations/chat/anthropic#prompt-caching)
     - [Gemini](https://reference.langchain.com/python/integrations/langchain_google_genai/).
 
 
@@ -975,7 +975,7 @@ Certain models can be configured to return token-level log probabilities represe
 
 ```typescript
 const model = new ChatOpenAI({
-    model: "gpt-5.4",
+    model: "gpt-5.5",
     logprobs: true,
 });
 
@@ -1018,7 +1018,7 @@ const response = await model.invoke(
 
 
 These configuration values are particularly useful when:
-- Debugging with [LangSmith](/langsmith/home) tracing
+- Debugging with [LangSmith](/langsmith/observability) tracing
 - Implementing custom logging or monitoring
 - Controlling resource usage in production
 - Tracking invocations across complex pipelines
@@ -1070,7 +1070,7 @@ import { ChatOpenAI } from "@langchain/openai";
 import { createAgent, createMiddleware } from "langchain";
 
 const basicModel = new ChatOpenAI({ model: "gpt-5.4-mini" });
-const advancedModel = new ChatOpenAI({ model: "gpt-5.4" });
+const advancedModel = new ChatOpenAI({ model: "gpt-5.5" });
 
 const dynamicModelSelection = createMiddleware({
   name: "DynamicModelSelection",

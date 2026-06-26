@@ -68,7 +68,7 @@ The `systemPrompt` parameter is static which means it does not change per invoca
 For some use cases you may want a dynamic prompt: for example, to tell the model "You have admin access" vs "You have read-only access," or to inject user preferences like "User prefers concise responses" from [long-term memory](#long-term-memory).
 If your prompt depends on context or `runtime.store`, use `dynamicSystemPromptMiddleware` to build context-aware instructions.
 Your middleware can read `request.runtime.context` and `request.runtime.store`.
-See [Customization](/oss/javascript/deepagents/customization#middleware) for adding [custom middleware](/oss/javascript/langchain/middleware) and the [LangChain context engineering](/oss/javascript/langchain/context-engineering#system-prompt) guide for examples.
+See [Customization](/oss/javascript/deepagents/customization#middleware) for the [default middleware stack](/oss/javascript/deepagents/customization#default-stack-main-agent) and for adding [custom middleware](/oss/javascript/langchain/middleware). See the [LangChain context engineering](/oss/javascript/langchain/context-engineering#system-prompt) guide for examples.
 
 You do **not** need middleware when tools alone use context or `runtime.store`; tools receive the `runtime` object (including `runtime.context` and `runtime.store`) directly. Add middleware only when the system prompt itself must vary per request.
 
@@ -111,9 +111,9 @@ Keep each skill focused on a single workflow or domain; broad or overlapping ski
 
 ### Tool prompts
 
-[Tool](/oss/javascript/langchain/tools) prompts are instructions that shape how the model uses tools. All tools expose metadata the model sees in its prompt—typically a schema and a description. Tools you pass via the `tools` parameter surface that tool metadata (schema and descriptions) to the model. A deep agent's built-in tools are packaged in middleware and typically also update the system prompt with more guidance for those tools.
+[Tool](/oss/javascript/langchain/tools) prompts are instructions that shape how the model uses tools. All tools expose metadata the model sees in its prompt—typically a schema and a description. Tools you pass via the `tools` parameter surface that tool metadata (schema and descriptions) to the model. A deep agent's built-in tools are packaged in the [default middleware stack](/oss/javascript/deepagents/customization#default-stack-main-agent) and typically also update the system prompt with more guidance for those tools.
 
-**Built-in tools** – Middleware that adds harness capabilities (planning, filesystem, subagents) automatically appends tool-specific instructions to the system prompt, creating tool prompts that explain how to use those tools effectively:
+**Built-in tools** – Middleware that adds harness capabilities (planning, filesystem, subagents) automatically appends tool-specific instructions to the system prompt, creating tool prompts that explain how to use those tools effectively. See [Customization](/oss/javascript/deepagents/customization#middleware) for the full list:
 - Planning prompt – Instructions for `write_todos` to maintain a structured task list
 - Filesystem prompt – Documentation for `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep` (and `execute` when using a sandbox backend)
 - Subagent prompt – Guidance for delegating work with the `task` tool
@@ -149,7 +149,7 @@ order status. Always filter by the provided status.`,
     To override a built-in or user-supplied tool's description for a specific provider or model, use a [harness profile](/oss/javascript/deepagents/profiles#harness-profiles)'s `tool_description_overrides` keyed by tool name. `excluded_tools` removes a tool from the visible tool set entirely.
 </Tip>
 
-See [Harness](/oss/javascript/deepagents/harness) for built-in capabilities and [Customization](/oss/javascript/deepagents/customization#tools) for passing tools directly.
+See [Overview](/oss/javascript/deepagents/overview#execution-environment) for built-in capabilities and [Customization](/oss/javascript/deepagents/customization#tools) for passing tools directly.
 
 ### Complete system prompt
 
@@ -217,6 +217,8 @@ Runtime context **propagates to all subagents**. When a subagent runs, it receiv
 
 ## Context compression
 
+Every `create_deep_agent` call includes built-in context compression. You do not need to add middleware for offloading or summarization to work.
+
 Long-running tasks produce large tool outputs and long conversation history.
 Context compression reduces the size of information in an agent's working memory while preserving details relevant to the task.
 The following techniques are the built-in mechanisms to ensure the context passed to LLMs stays within its context window limit:
@@ -232,7 +234,7 @@ The following techniques are the built-in mechanisms to ensure the context passe
 
 ### Offloading
 
-Deep Agents use the [built-in filesystem tools](/oss/javascript/deepagents/harness#virtual-filesystem-access) to automatically offload content and to search and retrieve that offloaded content as needed.
+Deep Agents use the [built-in filesystem tools](/oss/javascript/deepagents/overview#virtual-filesystem-access) to automatically offload content and to search and retrieve that offloaded content as needed.
 Content offloading happens when tool call inputs or results exceed a token threshold (default 20,000):
 
 1. **Tool call inputs exceed 20,000 tokens**: File write and edit operations leave behind tool calls containing the complete file content in the agent's conversation history.
@@ -245,21 +247,9 @@ Content offloading happens when tool call inputs or results exceed a token thres
 
     ![An example of offloading showing a large tool response that is replaced with a message about the location of the offloaded results and the first 10 lines of the result](/oss/images/deepagents/offloading-results.png)
 
-### Multimodal inputs
-
-Deep Agents supports multimodal inputs, such as images returned by `read_file` or provided in messages, but the built-in context management mechanisms are primarily text and message-history oriented. They do not resize images, lower image resolution, or generate reusable visual embeddings.
-
-For multimodal workloads, keep large media out of active message history when possible:
-
-- Store images, screenshots, and charts in a filesystem backend or external object store, then pass file paths or URLs through messages.
-- Prefer references over base64-encoded image blocks in long-running conversations.
-- If a tool produces an image, have the tool save the image and return a concise text description plus a path or URL.
-- Use subagents for image-heavy inspection work so the main agent receives a compact text result instead of every multimodal intermediate step.
-- Tune summarization thresholds or provide a custom token counter when your model provider charges many tokens for images.
-
-Offloading large tool inputs and results only measures text content. Non-text blocks, including images, are preserved in the replacement message rather than compressed. A message that contains only an image will not be offloaded because of image size alone.
-
-Summarization replaces older messages with a text summary once those messages fall outside the preserved recent context. Any images in the summarized partition are no longer sent as active image blocks after summarization. The conversation history file written to the backend is a textual record, not a media artifact store, so store important images separately if the agent needs to inspect them again later.
+<Note>
+Built-in context compression does not resize images, lower image resolution, or generate visual embeddings. For multimodal inputs, tool outputs, and how compression interacts with media, see [Multimodal](/oss/javascript/deepagents/multimodal).
+</Note>
 
 ### Summarization
 
@@ -268,7 +258,7 @@ The current summarization behavior (in-model summarization via `wrapModelCall`, 
 </Note>
 
 
-When the context size crosses the model's context window limit (for example 85% of `max_input_tokens`), and there is no more context eligible for offloading, the deep agent summarizes the message history.
+Every `create_deep_agent` call includes [`SummarizationMiddleware`](https://reference.langchain.com/javascript/langchain/index/summarizationMiddleware) in the [default middleware stack](/oss/javascript/deepagents/customization#default-stack-main-agent). When the context size crosses the model's context window limit (for example 85% of `max_input_tokens`), and there is no more context eligible for offloading, the deep agent summarizes the message history automatically.
 
 This process has two components:
 
@@ -389,8 +379,10 @@ See [Long-term memory](/oss/javascript/deepagents/memory) for setup and use case
 
 ## Related resources
 
-- [Harness](/oss/javascript/deepagents/harness) – Context management overview, offloading, summarization
-- [Subagents](/oss/javascript/deepagents/subagents) – Context isolation, runtime context propagation
+- [Harness](/oss/javascript/deepagents/overview) – Context management overview, offloading,
+summarization
+- [Multimodal](/oss/javascript/deepagents/multimodal) — images, audio, video, and multimodal tool outputs
+- [Subagents](/oss/javascript/deepagents/subagents) — Context isolation, runtime context propagation
 - [Long-term memory](/oss/javascript/deepagents/memory) – Cross-thread persistence
 - [Skills](/oss/javascript/deepagents/skills) – Progressive disclosure and skill authoring
 - [Backends](/oss/javascript/deepagents/backends) – Filesystem backends and CompositeBackend

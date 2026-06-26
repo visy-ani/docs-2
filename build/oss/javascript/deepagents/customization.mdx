@@ -53,7 +53,7 @@ Build the harness around your goal. `create_deep_agent` gives you a production-r
 
 
 
-`createDeepAgent` ships with a pre-assembled harness: filesystem, summarization, subagents, and prompt caching by default. The parameters below let you define the agent's persona, connect it to your data and tools, and extend the stack with additional middleware.
+`createDeepAgent` ships with a pre-assembled harness: filesystem, summarization, subagents, and prompt caching by default. The parameters below let you define the agent's persona, connect it to your data and tools, and extend the [default middleware stack](#default-stack-main-agent) with additional middleware.
 
 ```typescript
 import { createDeepAgent } from "deepagents";
@@ -77,9 +77,10 @@ const agent = await createDeepAgent({
 | `backend` | Filesystem backend (StateBackend by default) |
 | `permissions` | Path-level access control for the filesystem |
 | `subagents` | Custom subagents for delegated tasks |
-| `middleware` | Extra middleware to add to the stack |
+| `middleware` | Extra middleware appended to the [default stack](#default-stack-main-agent) |
 | `interruptOn` | Pause before tool calls for human approval |
 | `responseFormat` | Structured output schema |
+| [`contextSchema`](/oss/javascript/deepagents/context-engineering#runtime-context) | Per-run runtime context schema (user IDs, API keys, feature flags) |
 
 For the full parameter list, see the [`createDeepAgent`](https://reference.langchain.com/javascript/deepagents/types/CreateDeepAgentParams) API reference. To compose a fully custom harness from scratch, see [Configure the harness](/oss/javascript/langchain/agents#configure-the-harness).
 
@@ -95,7 +96,7 @@ We recommend you also set up [LangSmith Engine](/langsmith/engine), which monito
 Pass a `model` string in `provider:model` format, or an initialized model instance. See [supported models](/oss/javascript/deepagents/models#supported-models) for all providers and [suggested models](/oss/javascript/deepagents/models#suggested-models) for tested recommendations.
 
 <Tip>
-    Use the `provider:model` format (for example `openai:gpt-5.4`) to quickly switch between models.
+    Use the `provider:model` format (for example `openai:gpt-5.5`) to quickly switch between models.
 </Tip>
 
 
@@ -109,7 +110,7 @@ Pass a `model` string in `provider:model` format, or an initialized model instan
 
 ## Tools
 
-In addition to [built-in tools](/oss/javascript/deepagents/overview#core-capabilities) for planning, file management, and subagent spawning, you can provide custom tools:
+In addition to [built-in tools](/oss/javascript/deepagents/overview#execution-environment) for planning, file management, and subagent spawning, you can provide custom tools:
 
 
 
@@ -144,7 +145,7 @@ const client = new MultiServerMCPClient({
 const tools = await client.getTools();
 
 const agent = await createDeepAgent({
-    model: "openai:gpt-5.4",
+    model: "openai:gpt-5.5",
     tools,
 });
 
@@ -267,7 +268,7 @@ Deep Agents support any [middleware](/oss/javascript/langchain/middleware/overvi
 
 
 
-Pass middleware to the `middleware` argument of `createDeepAgent`.
+Pass middleware to the `middleware` argument of `createDeepAgent`. Custom middleware is appended after [`PatchToolCallsMiddleware`](https://reference.langchain.com/javascript/deepagents/middleware/createPatchToolCallsMiddleware) in the [default stack](#default-stack-main-agent).
 
 
 By default, Deep Agents have access to the following middleware:
@@ -283,20 +284,19 @@ From first to last:
 3. [`FilesystemMiddleware`](https://reference.langchain.com/javascript/deepagents/middleware/createFilesystemMiddleware): Handles file system operations such as reading, writing, and navigating directories. When you pass `permissions`, filesystem permissions enforcement is included here so it can evaluate every tool the agent might call.
 4. [`SubAgentMiddleware`](https://reference.langchain.com/javascript/deepagents/middleware/createSubAgentMiddleware): Spawns and coordinates subagents for delegating tasks to specialized agents.
 5. [`SummarizationMiddleware`](https://reference.langchain.com/javascript/langchain/index/summarizationMiddleware): Condenses message history to stay within context limits when conversations grow long (via [createSummarizationMiddleware](https://reference.langchain.com/javascript/deepagents/middleware/createSummarizationMiddleware)).
-6. [`PatchToolCallsMiddleware`](https://reference.langchain.com/javascript/deepagents/middleware/createPatchToolCallsMiddleware): Automatic message history fixes when tool calls are interrupted or cancelled before receiving results. Runs **before** Anthropic prompt caching and the tail stack below.
+6. [`PatchToolCallsMiddleware`](https://reference.langchain.com/javascript/deepagents/middleware/createPatchToolCallsMiddleware): Repairs dangling tool calls in message history when a run resumes after an interruption or receives malformed tool-call arguments. Runs **before** Anthropic prompt caching and the tail stack below.
 7. [`AsyncSubAgentMiddleware`](https://reference.langchain.com/javascript/deepagents/agent/createDeepAgent): Only when you configure async subagents.
 8. **Your middleware argument**: Optional middleware you pass as the `middleware` argument is appended here (after Patch, before the tail stack).
 9. **Harness profile extras**: Provider-specific middleware from the resolved model profile, if any.
-tools from the agent.
-10. [`AnthropicPromptCachingMiddleware`](https://reference.langchain.com/javascript/langchain/index/anthropicPromptCachingMiddleware): Automatically added when you are using an Anthropic mode. Runs **after** Patch and after your middleware so the cached prefix matches what is actually sent to the model.
-11. [`MemoryMiddleware`](https://reference.langchain.com/javascript/deepagents/middleware/createMemoryMiddleware): Only when you pass `memory`.
+10. **Excluded-tool filtering**: When the harness profile lists excluded tools, middleware removes those tools from the agent.
+11. **Prompt caching** ([`AnthropicPromptCachingMiddleware`](https://reference.langchain.com/javascript/langchain/index/anthropicPromptCachingMiddleware) and [`BedrockPromptCachingMiddleware`](https://reference.langchain.com/javascript/langchain/index/bedrockPromptCachingMiddleware)): Added automatically for Anthropic models and Amazon Bedrock Converse models, respectively. Both run **after** Patch and after your middleware so the cached prefix matches what is actually sent to the model.
+12. [`MemoryMiddleware`](https://reference.langchain.com/javascript/deepagents/middleware/createMemoryMiddleware): Only when you pass `memory`.
 
     <Note>
-    `MemoryMiddleware` is placed **after** profile extras and Anthropic prompt caching so updates to injected memory are less likely to invalidate the Anthropic cache prefix. The same ordering concern is called out in the `createDeepAgent` implementation comments.
+    `MemoryMiddleware` is placed **after** profile extras and the prompt caching middleware so updates to injected memory are less likely to invalidate the cache prefix. The same ordering concern is called out in the `createDeepAgent` implementation comments.
     </Note>
 
-12. `HumanInTheLoopMiddleware`: Only when you pass `interruptOn`. Pauses for human approval or input at configured tool calls.
-13. **Excluded-tool filtering**: When the harness profile lists excluded tools, middleware removes those ```
+13. `HumanInTheLoopMiddleware`: Only when you pass `interruptOn`. Pauses for human approval or input at configured tool calls.
 
 
 
@@ -304,7 +304,7 @@ tools from the agent.
 
 
 
-The built-in **general-purpose** subagent and each declarative synchronous `SubAgent` graph use a stack that `createDeepAgent` builds in code. It matches the main agent in broad shape (todo list, filesystem, summarization, Patch, profile extras, Anthropic caching, optional permissions) but differs in two ways:
+The built-in **general-purpose** subagent and each declarative synchronous `SubAgent` graph use a stack that `createDeepAgent` builds in code. It matches the main agent in broad shape (todo list, filesystem, summarization, Patch, profile extras, Anthropic and Bedrock caching, optional permissions) but differs in two ways:
 
 - **Skills run after** [`PatchToolCallsMiddleware`](https://reference.langchain.com/javascript/deepagents/middleware/createPatchToolCallsMiddleware) on these inner agents (on the main agent, skills run **before** filesystem middleware when `skills` is set).
 - There is **no** [`SubAgentMiddleware`](https://reference.langchain.com/javascript/deepagents/middleware/createSubAgentMiddleware) inside a subagent graph (only the parent agent exposes the `task` tool).
@@ -372,7 +372,7 @@ Use [interpreters](/oss/javascript/deepagents/interpreters) to add an `eval` too
 <CustomizationInterpretersJs />
 
 
-For setup, programmatic tool calling, interpreter skills, and limits, see [Interpreters](/oss/javascript/deepagents/interpreters).
+For setup, programmatic tool calling, subagent orchestration, and limits, see [Interpreters](/oss/javascript/deepagents/interpreters).
 
 ## Subagents
 

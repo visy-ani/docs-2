@@ -7,7 +7,11 @@ import GraphApiUsingTasksOriginalJs from '/snippets/code-samples/graph-api-using
 import GraphApiUsingTasksOriginalPy from '/snippets/code-samples/graph-api-using-tasks-original-py.mdx';
 import GraphApiUsingTasksTaskJs from '/snippets/code-samples/graph-api-using-tasks-task-js.mdx';
 import GraphApiUsingTasksTaskPy from '/snippets/code-samples/graph-api-using-tasks-task-py.mdx';
+import LanggraphGraphApiMultipleSchemasJs from '/snippets/code-samples/langgraph-graph-api-multiple-schemas-js.mdx';
+import LanggraphGraphApiMultipleSchemasPy from '/snippets/code-samples/langgraph-graph-api-multiple-schemas-py.mdx';
 import LanggraphGraphApiResumeV2Py from '/snippets/code-samples/langgraph-graph-api-resume-v2-py.mdx';
+import LanggraphGraphApiStreamPrivateChannelJs from '/snippets/code-samples/langgraph-graph-api-stream-private-channel-js.mdx';
+import LanggraphGraphApiStreamPrivateChannelPy from '/snippets/code-samples/langgraph-graph-api-stream-private-channel-py.mdx';
 
 ## Graphs
 
@@ -133,58 +137,7 @@ Let's look at an example:
 
 
 
-```typescript
-import { StateSchema, GraphNode } from "@langchain/langgraph";
-import * as z from "zod";
-
-const InputState = new StateSchema({
-  userInput: z.string(),
-});
-
-const OutputState = new StateSchema({
-  graphOutput: z.string(),
-});
-
-const OverallState = new StateSchema({
-  foo: z.string(),
-  userInput: z.string(),
-  graphOutput: z.string(),
-});
-
-const PrivateState = new StateSchema({
-  bar: z.string(),
-});
-
-const graph = new StateGraph({
-  state: OverallState,
-  input: InputState,
-  output: OutputState,
-})
-  .addNode("node1", (state) => {
-    // Write to OverallState
-    return { foo: state.userInput + " name" };
-  })
-  .addNode("node2", (state) => {
-    // Read from OverallState, write to PrivateState
-    return { bar: state.foo + " is" };
-  })
-  .addNode(
-    "node3",
-    (state) => {
-      // Read from PrivateState, write to OutputState
-      return { graphOutput: state.bar + " Lance" };
-    },
-    { input: PrivateState }
-  )
-  .addEdge(START, "node1")
-  .addEdge("node1", "node2")
-  .addEdge("node2", "node3")
-  .addEdge("node3", END)
-  .compile();
-
-await graph.invoke({ userInput: "My" });
-// { graphOutput: 'My name is Lance' }
-```
+<LanggraphGraphApiMultipleSchemasJs />
 
 
 
@@ -206,27 +159,17 @@ Input, output, and private schemas constrain what each node _reads_ (its input s
 
 When you stream with `streamMode: "values"`, the graph emits **all** of its state channels by default — including private ones — because values streaming defaults to the full set of state channels rather than the output schema. This is why a private channel like `bar` is hidden by `invoke` but visible while streaming:
 
-```typescript
-for await (const chunk of await graph.stream(
-  { userInput: "My" },
-  { streamMode: "values" }
-)) {
-  console.log(chunk);
-}
-// { userInput: 'My' }
-// { userInput: 'My', foo: 'My name' }
-// { userInput: 'My', foo: 'My name', bar: 'My name is' }            // <-- private channel
-// { userInput: 'My', foo: 'My name', bar: 'My name is', graphOutput: 'My name is Lance' }
-```
+<LanggraphGraphApiStreamPrivateChannelJs />
 
 To restrict the streamed values to a specific set of channels (e.g. only the output schema), pass `outputKeys`:
 
 ```typescript
-for await (const chunk of await graph.stream(
+const stream = await graph.streamEvents(
   { userInput: "My" },
-  { streamMode: "values", outputKeys: ["graphOutput"] }  // [!code highlight]
-)) {
-  console.log(chunk);
+  { version: "v3", outputKeys: ["graphOutput"] }  // [!code highlight]
+);
+for await (const snapshot of stream.values) {
+  console.log(snapshot);
 }
 // { graphOutput: 'My name is Lance' }
 ```
@@ -534,7 +477,7 @@ const builder = new StateGraph(State)
 
 
 
-Behind the scenes, functions are converted to [`RunnableLambda`](https://reference.langchain.com/javascript/langchain-core/runnables/RunnableLambda), which add batch and async support to your function, along with [native tracing and debugging](/langsmith/home).
+Behind the scenes, functions are converted to [`RunnableLambda`](https://reference.langchain.com/javascript/langchain-core/runnables/RunnableLambda), which add batch and async support to your function, along with [native tracing and debugging](/langsmith/observability).
 
 If you add a node to a graph without specifying a name, it will be given a default name equivalent to the function name.
 
@@ -865,7 +808,7 @@ This is particularly useful when implementing [multi-agent handoffs](/oss/javasc
 
 <Warning>
 
-`new Command({ resume: ... })` is the **only** `Command` pattern intended as input to `invoke()`/`stream()`. Do not use `new Command({ update: ... })` as input to continue multi-turn conversations—because passing any `Command` as input resumes from the latest checkpoint (i.e. the last step that ran, not `__start__`), the graph will appear stuck if it already finished. To continue a conversation on an existing thread, pass a plain input object:
+`new Command({ resume: ... })` is the **only** `Command` pattern intended as input to `invoke()`/`stream()` (optionally combined with `update` to also apply a state change while resuming). Do not use `new Command({ update: ... })` alone as input to continue multi-turn conversations—because passing any `Command` as input resumes from the latest checkpoint (i.e. the last step that ran, not `__start__`), the graph will appear stuck if it already finished. To continue a conversation on an existing thread, pass a plain input object:
 
 ```typescript
 // WRONG - graph resumes from the latest checkpoint
@@ -1200,7 +1143,7 @@ It's often nice to be able to visualize graphs, especially as they get more comp
 
 ## Observability and Tracing
 
-To trace, debug and evaluate your agents, use [LangSmith](/langsmith/home).
+To trace, debug and evaluate your agents, use [LangSmith](/langsmith/observability).
 
 ## Learn more
 
